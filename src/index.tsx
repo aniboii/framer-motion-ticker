@@ -1,5 +1,9 @@
 import React from 'react';
-import { AnimationPlaybackControls, useAnimate, useInView } from 'framer-motion';
+import {
+  AnimationPlaybackControls,
+  useAnimate,
+  useInView,
+} from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 
 const TICKER_DIRECTION_LEFT = -1;
@@ -25,51 +29,63 @@ const Ticker: React.FunctionComponent<TickerProps> = (props: TickerProps) => {
     isPlaying = true,
     direction = TICKER_DIRECTION_LEFT,
   } = props;
+
   const tickerRef = React.useRef<HTMLDivElement>(null);
   const [tickerUUID, setTickerUUID] = React.useState<string>('');
   const [tickerContentWidth, setTickerContentWidth] = React.useState<number | null>(0);
   const [numDupes, setNumDupes] = React.useState<number>(1);
   const [scope, animate] = useAnimate();
-  const [animationControls, setAnimationControls] = React.useState<
-    AnimationPlaybackControls | undefined
-  >(undefined);
+  const [animationControls, setAnimationControls] = React.useState<AnimationPlaybackControls | undefined>(undefined);
   const isInView = useInView(scope);
 
+  // Generate unique ID
   React.useEffect(() => {
     setTickerUUID(uuidv4());
   }, []);
 
+  // Measure total width of children (deferred)
   React.useEffect(() => {
-    let contentWidth = 0;
+    if (!tickerUUID) return;
 
-    for (let index = 0; index < children.length; index++) {
-      const element = document.getElementById(tickerUUID + '_' + index)?.clientWidth;
-      if (element) {
-        contentWidth += element;
+    const timeout = setTimeout(() => {
+      let contentWidth = 0;
+
+      for (let index = 0; index < children.length; index++) {
+        const element = document.getElementById(`${tickerUUID}_${index}`);
+        if (element) {
+          contentWidth += element.clientWidth;
+        }
       }
-    }
 
-    setTickerContentWidth(contentWidth);
-  });
+      setTickerContentWidth(contentWidth);
+    }, 0);
 
+    return () => clearTimeout(timeout);
+  }, [tickerUUID, children]);
+
+  // Calculate how many times to duplicate the ticker row
   React.useEffect(() => {
     if (tickerRef.current && tickerContentWidth) {
-      setNumDupes(Math.max(Math.ceil((2 * tickerRef.current.clientWidth) / tickerContentWidth), 1));
+      const containerWidth = tickerRef.current.clientWidth;
+      const requiredDupes = Math.ceil((2 * containerWidth) / tickerContentWidth);
+      setNumDupes(Math.max(requiredDupes, 1));
     }
   }, [tickerRef.current, tickerContentWidth]);
 
+  // Start animation when in view
   React.useEffect(() => {
-    if (isInView && !animationControls) {
+    if (isInView && !animationControls && tickerContentWidth) {
       const controls = animate(
         scope.current,
-        { x: tickerContentWidth ? tickerContentWidth * direction : 0 },
+        { x: tickerContentWidth * direction },
         { ease: 'linear', duration, repeat: Infinity }
       );
       controls.play();
       setAnimationControls(controls);
     }
-  }, [isInView]);
+  }, [isInView, tickerContentWidth]);
 
+  // Pause/resume based on visibility or play state
   React.useEffect(() => {
     if (animationControls) {
       if (!isInView || !isPlaying) {
@@ -95,9 +111,6 @@ const Ticker: React.FunctionComponent<TickerProps> = (props: TickerProps) => {
       <div
         ref={scope}
         className="FMT__container__contents"
-        // initial={false}
-        // animate={{ x: tickerContentWidth * direction }}
-        // transition={{ ease: 'linear', duration, repeat: Infinity }}
         style={{ display: 'flex' }}
       >
         {children.map((item, index) => (
@@ -105,8 +118,10 @@ const Ticker: React.FunctionComponent<TickerProps> = (props: TickerProps) => {
             {item}
           </div>
         ))}
-        {[...Array(numDupes)].map((_) =>
-          children.map((item, index) => <div key={index}>{item}</div>)
+        {[...Array(numDupes)].map((_, dupeIndex) =>
+          children.map((item, index) => (
+            <div key={`dupe-${dupeIndex}-${index}`}>{item}</div>
+          ))
         )}
       </div>
     </div>
@@ -114,5 +129,4 @@ const Ticker: React.FunctionComponent<TickerProps> = (props: TickerProps) => {
 };
 
 export default Ticker;
-
 export { TICKER_DIRECTION_LEFT, TICKER_DIRECTION_RIGHT };
